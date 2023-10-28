@@ -9,6 +9,7 @@ In order to reduce the number of PInvoke calls only 2 functions are loaded: Load
 They are referenced with their ordinal numbers instead of a function name. The hardcoded numbers (697,969) are taken from a Windows 10 standard edition.
 For different flavors change accordingly and recompile. Additionally all of the function calls are hidden trough dynamic importations and type redefinitions.
 The following APIs are used from kernel32.dll and ntdll.dll
+
 Memory management:
 VirtualAllocEX, VirtualProtectEx, WriteProcessMemory, NtCreateSection, NtMapViewOfSection
 
@@ -20,8 +21,10 @@ OpenProcess, ResumeThread, WaitForSingleObject, InitializeProcThreadAttributeLis
 
 It is possible to mix the memory alloc and code execution techniques to achieve different injections, 
 its also possible to spoof the parent process ID of the sacrifical process spawned trough UpdateProcThreadAttribute
+and/or to block the loading of non microsoft signed DLLs, this can be useful to prevent EDR DLLs from being loaded in the sacrifical process.
 For additional explanations and examples the help menu can be used.
 
 TODO:
 1. Enumerate threads of an existing process and queue the APC on one of them, after this is done force it into alerted state.
 2. Possibly make use of encrypted shellcode 
+3. Better error handling

