@@ -1,9 +1,8 @@
 ﻿using System;
 using System.ComponentModel;
-using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using static Shellcode_Injector.WinApi;
 
 
@@ -11,6 +10,19 @@ namespace Shellcode_Injector
 {
     internal class Helpers
     {
+        //Read from local file
+        public static byte[] ReadLocal(string path)
+        {
+            try
+            {
+                byte[] sc = File.ReadAllBytes(path);
+                return sc;
+            }
+            catch (Exception ex)
+            {
+                throw new Win32Exception(ex.Message);
+            }
+        }
         //Fetch the file from remote host
         public static byte[] Fetch(string host, string file)
         {

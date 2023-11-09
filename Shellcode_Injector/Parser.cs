@@ -26,7 +26,8 @@ namespace Shellcode_Injector
             shellcode = new Dictionary<string, string> 
             {
                 { "host", "http://localhost" },
-                { "file", "calc.bin" }
+                { "file", "calc.bin" },
+                { "local", "" }
             };
 
             process = new Dictionary<string, object>
@@ -71,14 +72,18 @@ namespace Shellcode_Injector
                 {
                     shellcode["file"] = args[i + 1];
                 }
+                else if (current.StartsWith("--from-file") && i + 1 < args.Length)
+                {
+                    shellcode["local"] = args[i + 1];
+                }
                 //Remote injection or sacrifical process
-                else if (current.StartsWith("--remote-proc") && i + 1 < args.Length) 
+                else if (current.StartsWith("--remote-proc") && i + 1 < args.Length)
                 {
                     if (uint.TryParse(args[i + 1], out uint result))
                     {
                         pid = result;
                     }
-                    else 
+                    else
                     {
                         throw new Win32Exception("Please provide a valid integer for proccess ID");
                     }
@@ -136,6 +141,7 @@ Shellcode
 
 --file               File that is containing the shellcode, this should be fetched from the remote host, default value: calc.bin
 
+--from-file          Read the shellcode from a local file, default: emptry string
 
 Remote process injection
 --remote-proc        PID of a remote process to inject, default: 0
