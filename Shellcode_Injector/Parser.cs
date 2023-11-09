@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 
 
 namespace Shellcode_Injector
@@ -16,8 +17,11 @@ namespace Shellcode_Injector
 
         public uint ppid { get; private set; }
 
+        public uint pid { get; private set; }
+
         public Parser(string[] args) 
         {
+            pid = 0;
             //initialize defaults 
             shellcode = new Dictionary<string, string> 
             {
@@ -67,8 +71,20 @@ namespace Shellcode_Injector
                 {
                     shellcode["file"] = args[i + 1];
                 }
+                //Remote injection or sacrifical process
+                else if (current.StartsWith("--remote-proc") && i + 1 < args.Length) 
+                {
+                    if (uint.TryParse(args[i + 1], out uint result))
+                    {
+                        pid = result;
+                    }
+                    else 
+                    {
+                        throw new Win32Exception("Please provide a valid integer for proccess ID");
+                    }
+                }
                 //Parse create process arguments
-                else if (current.StartsWith("--prod-cmd") && i + 1 < args.Length)
+                else if (current.StartsWith("--proc-cmd") && i + 1 < args.Length)
                 {
                     process["cmd"] = args[i + 1];
                 }
@@ -121,6 +137,10 @@ Shellcode
 --file               File that is containing the shellcode, this should be fetched from the remote host, default value: calc.bin
 
 
+Remote process injection
+--remote-proc        PID of a remote process to inject, default: 0
+
+
 Process creation, these flags control the process that will be created for shellcode injection
 
 --proc-cmd           Command to be executed by the spawned process, default value: C:\Windows\System32\notepad.exe
@@ -159,6 +179,7 @@ Note:
 In order to spoof the parent process ID for the newly created process, you have to have the necessary permissions...
 eg. with a regular user you cant use a SYSTEM level process for ppid.
 Setting --proc-blockdlls will set the PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY property on the sacrifical process, this can be useful when EDR dlls are being loaded
+At the moment for remote process injection only CreateRemoteThread and NTCreateThreadEx executions are possible.ss
             ";
 
             Console.WriteLine(help_msg);

